@@ -43,6 +43,18 @@ def mock_clone(self, source, dest):
     shutil.copytree(str(folder), str(dest))
 
 
+def mock_download(self, url, dest):
+    parts = urlparse.urlparse(url)
+
+    fixtures = Path(__file__).parent.parent / "fixtures"
+    fixture = fixtures / parts.path.lstrip("/")
+
+    if dest.exists():
+        shutil.rmtree(str(dest))
+
+    os.symlink(str(fixture), str(dest))
+
+
 @pytest.fixture
 def installed():
     return BaseRepository()
@@ -67,6 +79,9 @@ def setup(mocker, installer, installed, config):
     mocker.patch("poetry.vcs.git.Git.checkout", new=lambda *_: None)
     p = mocker.patch("poetry.vcs.git.Git.rev_parse")
     p.return_value = "9cf87a285a2d3fbb0b9fa621997b3acc3631ed24"
+
+    # Patch download to not download anything but to just copy from fixtures
+    mocker.patch("poetry.utils.inspector.Inspector.download", new=mock_download)
 
     # Setting terminal width
     environ = dict(os.environ)
