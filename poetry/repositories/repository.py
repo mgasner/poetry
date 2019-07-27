@@ -9,11 +9,17 @@ class Repository(BaseRepository):
     def __init__(self, packages=None):
         super(Repository, self).__init__()
 
+        self._name = None
+
         if packages is None:
             packages = []
 
         for package in packages:
             self.add_package(package)
+
+    @property
+    def name(self):
+        return self._name
 
     def package(self, name, version, extras=None):
         name = name.lower()
@@ -71,6 +77,9 @@ class Repository(BaseRepository):
                             for req in reqs:
                                 if req.name == dep.name:
                                     dep.activate()
+
+                    if extras:
+                        package.requires_extras = extras
 
                     packages.append(package)
 

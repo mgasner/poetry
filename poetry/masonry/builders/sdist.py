@@ -32,6 +32,8 @@ setup_kwargs = {{
     'long_description': {long_description!r},
     'author': {author!r},
     'author_email': {author_email!r},
+    'maintainer': {maintainer!r},
+    'maintainer_email': {maintainer_email!r},
     'url': {url!r},
     {extra}
 }}
@@ -43,7 +45,7 @@ setup(**setup_kwargs)
 
 class SdistBuilder(Builder):
     def build(self, target_dir=None):  # type: (Path) -> Path
-        self._io.writeln(" - Building <info>sdist</info>")
+        self._io.write_line(" - Building <info>sdist</info>")
         if target_dir is None:
             target_dir = self._path / "dist"
 
@@ -90,7 +92,7 @@ class SdistBuilder(Builder):
             tar.close()
             gz.close()
 
-        self._io.writeln(" - Built <fg=cyan>{}</>".format(target.name))
+        self._io.write_line(" - Built <comment>{}</comment>".format(target.name))
 
         return target
 
@@ -109,6 +111,9 @@ class SdistBuilder(Builder):
         packages = []
         package_data = {}
         for include in self._module.includes:
+            if include.formats and "sdist" not in include.formats:
+                continue
+
             if isinstance(include, PackageInclude):
                 if include.is_package():
                     pkg_dir, _packages, _package_data = self.find_packages(include)
@@ -177,6 +182,8 @@ class SdistBuilder(Builder):
                 long_description=to_str(self._meta.description),
                 author=to_str(self._meta.author),
                 author_email=to_str(self._meta.author_email),
+                maintainer=to_str(self._meta.maintainer),
+                maintainer_email=to_str(self._meta.maintainer_email),
                 url=to_str(self._meta.home_page),
                 extra="\n    ".join(extra),
                 after="\n".join(after),
@@ -260,7 +267,9 @@ class SdistBuilder(Builder):
 
     @classmethod
     def convert_dependencies(
-        cls, package, dependencies  # type: Package  # type: List[Dependency]
+        cls,
+        package,  # type: Package
+        dependencies,  # type: List[Dependency]
     ):
         main = []
         extras = defaultdict(list)

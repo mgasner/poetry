@@ -2,29 +2,41 @@ import re
 
 from typing import List
 
+from cleo import argument
+from cleo import option
+
 from ..command import Command
 
 
 class DebugResolveCommand(Command):
-    """
-    Debugs dependency resolution.
 
-    debug:resolve
-        { package?* : packages to resolve. }
-        { --E|extras=* : Extras to activate for the dependency. }
-        { --python= : Python version(s) to use for resolution. }
-        { --tree : Displays the dependency tree. }
-        { --install : Show what would be installed for the current system. }
-    """
+    name = "resolve"
+    description = "Debugs dependency resolution."
 
-    _loggers = ["poetry.repositories.pypi_repository"]
+    arguments = [
+        argument("package", "Packages to resolve.", optional=True, multiple=True)
+    ]
+    options = [
+        option(
+            "extras",
+            "E",
+            "Extras to activate for the dependency.",
+            flag=False,
+            multiple=True,
+        ),
+        option("python", None, "Python version(s) to use for resolution.", flag=False),
+        option("tree", None, "Displays the dependency tree."),
+        option("install", None, "Show what would be installed for the current system."),
+    ]
+
+    loggers = ["poetry.repositories.pypi_repository"]
 
     def handle(self):
         from poetry.packages import ProjectPackage
         from poetry.puzzle import Solver
         from poetry.repositories.repository import Repository
         from poetry.semver import parse_constraint
-        from poetry.utils.env import Env
+        from poetry.utils.env import EnvManager
 
         packages = self.argument("package")
 
@@ -54,7 +66,7 @@ class DebugResolveCommand(Command):
 
         pool = self.poetry.pool
 
-        solver = Solver(package, pool, Repository(), Repository(), self.output)
+        solver = Solver(package, pool, Repository(), Repository(), self._io)
 
         ops = solver.solve()
 
@@ -63,9 +75,8 @@ class DebugResolveCommand(Command):
         self.line("")
 
         if self.option("tree"):
-            show_command = self.get_application().find("show")
-            show_command.output = self.output
-            show_command.init_styles()
+            show_command = self.application.find("show")
+            show_command.init_styles(self.io)
 
             packages = [op.package for op in ops]
             repo = Repository(packages)
@@ -74,15 +85,17 @@ class DebugResolveCommand(Command):
             for pkg in repo.packages:
                 for require in requires:
                     if pkg.name == require.name:
-                        show_command.display_package_tree(pkg, repo)
+                        show_command.display_package_tree(self.io, pkg, repo)
                         break
 
             return 0
 
-        env = Env.get(self.poetry.file.parent)
+        env = EnvManager(self.poetry.config).get(self.poetry.file.parent)
         current_python_version = parse_constraint(
             ".".join(str(v) for v in env.version_info)
         )
+        table = self.table([], style="borderless")
+        rows = []
         for op in ops:
             pkg = op.package
             if self.option("install"):
@@ -90,17 +103,19 @@ class DebugResolveCommand(Command):
                     current_python_version
                 ) or not env.is_valid_for_marker(pkg.marker):
                     continue
-
-            self.line(
-                "  - <info>{}</info> (<comment>{}</comment>)".format(
-                    pkg.name, pkg.version
-                )
-            )
-            if not pkg.python_constraint.is_any():
-                self.line("    - python: {}".format(pkg.python_versions))
+            row = [
+                "<info>{}</info>".format(pkg.name),
+                "<b>{}</b>".format(pkg.version),
+                "",
+            ]
 
             if not pkg.marker.is_any():
-                self.line("    - marker: {}".format(pkg.marker))
+                row[2] = str(pkg.marker)
+
+            rows.append(row)
+
+        table.set_rows(rows)
+        table.render(self.io)
 
     def _determine_requirements(self, requires):  # type: (List[str]) -> List[str]
         from poetry.semver import parse_constraint
